@@ -21,6 +21,7 @@ from course_ta.knowledge_base import KnowledgeBase
 from course_ta.qa import (
     build_qa_chain,
     condense_question,
+    dedupe_retrieval,
     format_context,
     history_to_messages,
     make_sources,
@@ -342,7 +343,7 @@ def qa_tab(settings, knowledge_base: KnowledgeBase, top_k: int) -> None:
                 with st.spinner("正在检索资料…"):
                     try:
                         search_query = condense_question(get_llm(), history, question)
-                        pairs = knowledge_base.search(search_query, k=top_k)
+                        pairs = dedupe_retrieval(knowledge_base.search(search_query, k=top_k))
                     except Exception as exc:
                         st.error(f"检索失败：{exc}")
                         pairs = []

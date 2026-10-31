@@ -11,5 +11,5 @@
 - 多轮问答、流式输出、引用来源卡片、资料不足拒答
 - `create_agent` 智能体：知识库检索、计算器、当前时间
 - 本地 FastEmbed 与 SiliconFlow 两种 embedding 方案
-- 26 个离线单元测试、ruff、GitHub Actions
+- 27 个离线单元测试、ruff、GitHub Actions
 - RAG 检索评测脚本与演示资料生成脚本

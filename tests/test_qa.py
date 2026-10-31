@@ -6,6 +6,7 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from course_ta.qa import (
     answer_question,
     condense_question,
+    dedupe_retrieval,
     format_context,
     history_to_messages,
     make_sources,
@@ -41,6 +42,17 @@ def test_format_context_and_sources() -> None:
     assert sources[0].index == 1
     assert sources[1].index == 2
     assert sources[0].to_dict()["score"] == 0.9
+
+
+def test_dedupe_retrieval_keeps_source_indices_aligned() -> None:
+    docs = [doc("RAG 有索引和检索生成两个组件。", 1), doc("切分使用递归字符切分器。", 2)]
+    pairs = dedupe_retrieval([(docs[0], 0.9), (docs[0], 0.8), (docs[1], 0.6)])
+    assert len(pairs) == 2
+    context = format_context([document for document, _ in pairs])
+    sources = make_sources(pairs)
+    assert "[1]" in context and "[2]" in context
+    assert [source.index for source in sources] == [1, 2]
+    assert [source.page_label for source in sources] == ["第 1 张幻灯片", "第 2 张幻灯片"]
 
 
 def test_route_summary_mode() -> None:

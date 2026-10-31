@@ -193,6 +193,26 @@ def make_sources(
     return sources
 
 
+def dedupe_retrieval(
+    documents_with_scores: Iterable[tuple[Document, float]], limit: int = 6
+) -> list[tuple[Document, float]]:
+    """按（文件，页码）去重，保证 prompt 编号与来源卡片编号一致。"""
+    results: list[tuple[Document, float]] = []
+    seen: set[tuple[str, str]] = set()
+    for document, score in documents_with_scores:
+        metadata = document.metadata or {}
+        source_name = str(metadata.get("source", "未知文件"))
+        page_label = str(metadata.get("page_label") or _doc_location(document))
+        key = (source_name, page_label)
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append((document, score))
+        if len(results) >= limit:
+            break
+    return results
+
+
 def route_summary_mode(
     documents: Sequence[Document], force_map: bool = False, threshold: int = 20_000
 ) -> str:

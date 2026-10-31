@@ -331,7 +331,7 @@ ruff check .
 ruff format --check .
 ```
 
-- 26 个离线单元测试，覆盖 loader、切分、Chroma、摘要路由、引用、Agent 工具；
+- 27 个离线单元测试，覆盖 loader、切分、Chroma、摘要路由、引用、Agent 工具；
 - CI 不调用真实 API，不产生费用；
 - 真实 API 冒烟测试：
 
