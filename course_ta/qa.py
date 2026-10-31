@@ -173,7 +173,8 @@ def make_sources(
         metadata = document.metadata or {}
         source_name = str(metadata.get("source", "未知文件"))
         page_label = str(metadata.get("page_label") or _doc_location(document))
-        key = (source_name, page_label)
+        location_key = _doc_location(document)
+        key = (source_name, location_key)
         if key in seen:
             continue
         seen.add(key)
@@ -183,7 +184,7 @@ def make_sources(
                 index=len(sources) + 1,
                 source=source_name,
                 page_label=page_label,
-                location=_doc_location(document),
+                location=location_key,
                 snippet=snippet[:240] + ("…" if len(snippet) > 240 else ""),
                 score=round(float(score), 3),
             )
@@ -202,8 +203,8 @@ def dedupe_retrieval(
     for document, score in documents_with_scores:
         metadata = document.metadata or {}
         source_name = str(metadata.get("source", "未知文件"))
-        page_label = str(metadata.get("page_label") or _doc_location(document))
-        key = (source_name, page_label)
+        location_key = _doc_location(document)
+        key = (source_name, location_key)
         if key in seen:
             continue
         seen.add(key)
