@@ -1,0 +1,35 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 本地数据
+chroma_db/
+data/uploads/
+.cache/
+*.sqlite3
+
+# 工具缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 日志与临时文件
+*.log
+*.tmp
+Thumbs.db
+.DS_Store
+
+# 演示视频通常较大，放 Release 或外部链接
+docs/demo/*.mp4
