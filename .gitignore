@@ -16,6 +16,7 @@ dist/
 chroma_db/
 data/uploads/
 .cache/
+.demo/
 *.sqlite3
 
 # 工具缓存
