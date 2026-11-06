@@ -11,7 +11,7 @@ import time
 import streamlit as st
 
 from course_ta.agent import build_agent, extract_answer, extract_trace, run_agent
-from course_ta.config import ConfigError, get_settings, validate_settings
+from course_ta.config import ConfigError, friendly_error, get_settings, validate_settings
 from course_ta.documents import (
     find_saved_file,
     load_and_split,
@@ -22,6 +22,7 @@ from course_ta.qa import (
     build_qa_chain,
     condense_question,
     dedupe_retrieval,
+    demote_headings,
     format_context,
     history_to_messages,
     make_sources,
@@ -38,7 +39,8 @@ st.set_page_config(
 
 CSS = """
 <style>
-    .block-container {max-width: 1180px; padding-top: 2.0rem; padding-bottom: 3rem;}
+    .block-container {max-width: 1180px; padding-top: 3.2rem; padding-bottom: 3rem;}
+    header[data-testid="stHeader"] {background: transparent;}
     .hero {
         background: linear-gradient(135deg, #0f2742 0%, #173f5f 58%, #c2410c 160%);
         color: #fff7ed; border-radius: 22px; padding: 30px 34px 26px 34px;
@@ -58,7 +60,8 @@ CSS = """
     .stTabs [data-baseweb="tab"] {border-radius: 10px 10px 0 0; padding: 8px 18px;}
     div[data-testid="stChatMessage"] {border-radius: 14px;}
     .footer {color: #9ca3af; font-size: .8rem; text-align: center; padding-top: 16px;}
-    [data-testid="stAppDeployButton"] {display: none !important;}
+    [data-testid="stAppDeployButton"], .stAppDeployButton {display: none !important;}
+    .stButton button[kind="secondary"] {border-radius: 999px;}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -79,6 +82,34 @@ def get_kb() -> KnowledgeBase:
     return KnowledgeBase(settings, build_embeddings(settings))
 
 
+QA_EXAMPLES = [
+    "LangChain 有哪些核心模块？",
+    "典型的 RAG 应用程序包含哪两个主要组件？",
+    "ReAct 框架的设计理念是什么？",
+]
+AGENT_EXAMPLES = [
+    "课件里 AutoGen 支持哪些多智能体对话模式？",
+    "请计算 (128*3+7)/2，并告诉我现在的北京时间",
+]
+
+
+def ask_box(messages: list[dict], examples: list[str], key: str, placeholder: str) -> str | None:
+    """输入框 + 示例问题。对话为空时展示示例，点击即提问；一旦提问就收起示例。"""
+    slot = st.empty()
+    clicked = None
+    if not messages:
+        with slot.container():
+            st.caption("试试这些问题：")
+            columns = st.columns(len(examples))
+            for index, (column, text) in enumerate(zip(columns, examples, strict=True)):
+                if column.button(text, key=f"{key}_example_{index}", use_container_width=True):
+                    clicked = text
+    question = st.chat_input(placeholder, key=f"{key}_input") or clicked
+    if question:
+        slot.empty()
+    return question
+
+
 def init_state() -> None:
     defaults = {
         "qa_messages": [],
@@ -97,8 +128,7 @@ def hero() -> None:
         <div class="hero">
             <div class="eyebrow">开源软件构建技术 · LangChain 课程作业</div>
             <h1>课程资料智能助教</h1>
-            <p>上传课件、讲义或笔记，生成结构化摘要，并就资料提问。回答会标注文件名与页码，
-            方便回到原文核对。</p>
+            <p>上传课件或讲义，生成复习摘要并就资料提问；回答标注文件名与页码，可回原文核对。</p>
             <span class="pill">LangChain 1.x · LCEL</span>
             <span class="pill">DeepSeek API</span>
             <span class="pill">BGE / Qwen Embedding</span>
@@ -135,8 +165,7 @@ def render_sources(sources: list[dict]) -> None:
             with st.container(border=True):
                 st.markdown(
                     f"**[{source['index']}] {source['source']}**  \n"
-                    f"`{source['page_label']}` · 位置：{source['location']} · "
-                    f"相关度 {source['score']:.2f}"
+                    f"`{source['location']}` · 相关度 {source['score']:.2f}"
                 )
                 st.text(source["snippet"])
 
@@ -164,7 +193,7 @@ def index_uploads(uploaded_files, knowledge_base: KnowledgeBase, settings) -> No
             success += 1
             st.toast(f"《{uploaded.name}》已入库：{added} 个片段")
         except Exception as exc:
-            st.error(f"《{uploaded.name}》处理失败：{exc}")
+            st.error(f"《{uploaded.name}》处理失败：{friendly_error(exc)}")
         progress.progress(index / total, text=f"已处理 {index}/{total}")
     progress.empty()
     if success or skipped:
@@ -190,7 +219,8 @@ def sidebar(settings) -> tuple[KnowledgeBase, int]:
         files = knowledge_base.list_files()
         if files:
             for item in files:
-                page_text = f"{item['page_count']} 页" if item["page_count"] else "无固定页码"
+                unit = "张幻灯片" if item["file_type"] == "pptx" else "页"
+                page_text = f"{item['page_count']} {unit}" if item["page_count"] else "无固定页码"
                 st.markdown(f"**{item['source']}**")
                 st.caption(f"{item['file_type'].upper()} · {page_text} · {item['chunks']} 片段")
         else:
@@ -291,7 +321,7 @@ def summary_tab(settings, knowledge_base: KnowledgeBase) -> None:
                 st.session_state.summary_cache[cache_key] = (result, elapsed)
                 cached = (result, elapsed)
             except Exception as exc:
-                st.error(f"摘要生成失败：{exc}")
+                st.error(f"摘要生成失败：{friendly_error(exc)}")
 
     if cached:
         result, elapsed = cached
@@ -301,7 +331,7 @@ def summary_tab(settings, knowledge_base: KnowledgeBase) -> None:
             f"约 {result.characters:,} 字符 · 耗时 {elapsed:.1f}s"
         )
         with st.container(border=True):
-            st.markdown(result.text)
+            st.markdown(demote_headings(result.text))
         st.download_button(
             "下载 Markdown 摘要",
             data=result.text.encode("utf-8"),
@@ -325,14 +355,21 @@ def qa_tab(settings, knowledge_base: KnowledgeBase, top_k: int) -> None:
 
     if knowledge_base.count() == 0:
         st.info("知识库为空。请先在左侧上传课件并建立索引。")
-    else:
+        return
+
+    # 先占位消息区，再放输入框，保证输入框始终在对话下方
+    chat_box = st.container()
+    question = ask_box(
+        st.session_state.qa_messages, QA_EXAMPLES, "qa", "例如：RAG 的两个核心组件是什么？"
+    )
+
+    with chat_box:
         for message in st.session_state.qa_messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
                 if message.get("sources"):
                     render_sources(message["sources"])
 
-        question = st.chat_input("例如：RAG 的两个核心组件是什么？", key="qa_input")
         if question:
             history = list(st.session_state.qa_messages)
             st.session_state.qa_messages.append({"role": "user", "content": question})
@@ -345,7 +382,7 @@ def qa_tab(settings, knowledge_base: KnowledgeBase, top_k: int) -> None:
                         search_query = condense_question(get_llm(), history, question)
                         pairs = dedupe_retrieval(knowledge_base.search(search_query, k=top_k))
                     except Exception as exc:
-                        st.error(f"检索失败：{exc}")
+                        st.error(f"检索失败：{friendly_error(exc)}")
                         pairs = []
                         search_query = question
 
@@ -368,7 +405,7 @@ def qa_tab(settings, knowledge_base: KnowledgeBase, top_k: int) -> None:
                             )
                         )
                     except Exception as exc:
-                        st.error(f"回答生成失败：{exc}")
+                        st.error(f"回答生成失败：{friendly_error(exc)}")
                         answer = ""
                     if answer:
                         render_sources(sources)
@@ -382,7 +419,7 @@ def qa_tab(settings, knowledge_base: KnowledgeBase, top_k: int) -> None:
 def agent_tab(settings, knowledge_base: KnowledgeBase) -> None:
     left, right = st.columns([5, 1])
     with left:
-        st.subheader("🤖 智能体")
+        st.subheader("🧠 智能体")
         st.markdown(
             '<p class="section-note">用 create_agent 挂载三个工具：课程资料检索、计算器、当前时间。'
             "工具调用轨迹会显示在回答下方。</p>",
@@ -397,17 +434,27 @@ def agent_tab(settings, knowledge_base: KnowledgeBase) -> None:
         st.info("Agent 功能已关闭。设置 ENABLE_AGENT=true 后重启即可开启。")
         return
 
-    for message in st.session_state.agent_messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            if message.get("trace"):
-                with st.expander("🧰 工具调用轨迹", expanded=False):
-                    st.code("\n".join(message["trace"]), language="text")
+    chat_box = st.container()
+    question = ask_box(
+        st.session_state.agent_messages,
+        AGENT_EXAMPLES,
+        "agent",
+        "试试：RAG 的流程是什么？或者计算 (128*3+7)/2",
+    )
 
-    question = st.chat_input("试试：RAG 的流程是什么？或者计算 (128*3+7)/2", key="agent_input")
-    if not question:
-        return
+    with chat_box:
+        for message in st.session_state.agent_messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                if message.get("trace"):
+                    with st.expander("🧰 工具调用轨迹", expanded=False):
+                        st.code("\n".join(message["trace"]), language="text", wrap_lines=True)
+        if question:
+            run_agent_turn(knowledge_base, question)
 
+
+def run_agent_turn(knowledge_base: KnowledgeBase, question: str) -> None:
+    """执行一轮 Agent 对话，并把结果写回 session。"""
     history = list(st.session_state.agent_messages)
     st.session_state.agent_messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
@@ -424,12 +471,12 @@ def agent_tab(settings, knowledge_base: KnowledgeBase) -> None:
                 answer = extract_answer(result)
                 trace = extract_trace(result)
             except Exception as exc:
-                answer = f"Agent 暂时不可用：{exc}\n\n可以先使用“知识库问答”页面。"
+                answer = f"Agent 暂时不可用：{friendly_error(exc)}\n\n可以先使用“知识库问答”页面。"
                 trace = []
         st.markdown(answer)
         if trace:
             with st.expander("🧰 工具调用轨迹", expanded=True):
-                st.code("\n".join(trace), language="text")
+                st.code("\n".join(trace), language="text", wrap_lines=True)
 
     st.session_state.agent_messages.append({"role": "assistant", "content": answer, "trace": trace})
 
@@ -445,7 +492,7 @@ def main() -> None:
     init_state()
     knowledge_base, top_k = sidebar(settings)
 
-    tab_summary, tab_qa, tab_agent = st.tabs(["📄 文档总结", "💬 知识库问答", "🤖 智能体"])
+    tab_summary, tab_qa, tab_agent = st.tabs(["📄 文档总结", "💬 知识库问答", "🧠 智能体"])
     with tab_summary:
         summary_tab(settings, knowledge_base)
     with tab_qa:
