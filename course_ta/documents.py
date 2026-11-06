@@ -26,6 +26,8 @@ class LoadError(RuntimeError):
 def normalize_text(text: str) -> str:
     """清理控制字符与多余空白，保留段落结构。"""
     text = text.replace("\x00", " ").replace("\r\n", "\n").replace("\r", "\n")
+    # 课件里常见不间断空格、零宽字符和全角空格，统一成普通空格
+    text = text.replace("\xa0", " ").replace("​", "").replace("　", " ")
     lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
     return "\n".join(line for line in lines if line)
 
@@ -173,6 +175,28 @@ def _shape_text(shape) -> list[str]:
     return parts
 
 
+def strip_boilerplate(
+    pages: list[list[str]], min_pages: int = 5, ratio: float = 0.5
+) -> list[list[str]]:
+    """去掉在大多数页面重复出现的页眉页脚（版权声明、课程名、页码等）。
+
+    真实课件常在每页底部放同一段版权声明，如果不去掉，它会进入每个检索片段，
+    既浪费 token，也会让来源卡片的摘录全是同一句话。
+    """
+    if len(pages) < min_pages:
+        return pages
+    counts: dict[str, int] = {}
+    for lines in pages:
+        for line in set(lines):
+            counts[line] = counts.get(line, 0) + 1
+    threshold = max(3, int(len(pages) * ratio))
+    repeated = {line for line, count in counts.items() if count >= threshold}
+    return [
+        [line for line in lines if line not in repeated and not re.fullmatch(r"\d{1,3}", line)]
+        for lines in pages
+    ]
+
+
 def _load_pptx(path: Path, file_hash: str) -> list[Document]:
     try:
         from pptx import Presentation
@@ -181,20 +205,27 @@ def _load_pptx(path: Path, file_hash: str) -> list[Document]:
     except Exception as exc:
         raise LoadError(f"PPTX 解析失败：{exc}") from exc
 
-    documents: list[Document] = []
+    slides: list[tuple[int, list[str], str]] = []
     for index, slide in enumerate(presentation.slides, start=1):
         parts: list[str] = []
         for shape in slide.shapes:
             parts.extend(_shape_text(shape))
+        notes = ""
         try:
             if slide.has_notes_slide:
                 notes = normalize_text(slide.notes_slide.notes_text_frame.text)
-                if notes:
-                    parts.append(f"备注：{notes}")
         except Exception:
             pass
+        lines = [line for line in normalize_text("\n".join(parts)).split("\n") if line]
+        slides.append((index, lines, notes))
 
-        text = normalize_text("\n".join(parts))
+    cleaned = strip_boilerplate([lines for _, lines, _ in slides])
+
+    documents: list[Document] = []
+    for (index, _, notes), lines in zip(slides, cleaned, strict=True):
+        if notes:
+            lines = [*lines, f"备注：{notes}"]
+        text = "\n".join(lines)
         if len(text) < 5:
             continue
         documents.append(

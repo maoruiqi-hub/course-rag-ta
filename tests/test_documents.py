@@ -14,6 +14,7 @@ from course_ta.documents import (
     safe_filename,
     save_upload,
     split_documents,
+    strip_boilerplate,
 )
 
 SAMPLES = Path(__file__).resolve().parents[1] / "data" / "samples"
@@ -57,6 +58,16 @@ def test_load_pptx_has_slide_pages() -> None:
     assert docs[0].metadata["page"] == 1
     assert docs[0].metadata["page_label"] == "第 1 张幻灯片"
     assert "RAG" in docs[1].page_content
+
+
+def test_strip_boilerplate_removes_repeated_footer_and_page_numbers() -> None:
+    footer = "课件采用 CC BY-NC 4.0 许可"
+    pages = [[f"第 {i} 页标题", f"正文内容 {i}", footer, str(i)] for i in range(1, 9)]
+    cleaned = strip_boilerplate(pages)
+    assert all(footer not in lines for lines in cleaned)
+    assert cleaned[0] == ["第 1 页标题", "正文内容 1"]
+    # 页数太少时不做处理，避免误删短资料的正文
+    assert strip_boilerplate(pages[:3]) == pages[:3]
 
 
 def test_load_docx_has_section_and_paragraph_location() -> None:
