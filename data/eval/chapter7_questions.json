@@ -1,0 +1,24 @@
+{
+  "name": "《开源软件构建技术》第 7 章课件（76 张幻灯片）",
+  "note": "课件本身不在仓库中，需自备 PPTX 后用 --file 指定。expected 为人工标注的可接受幻灯片编号。",
+  "questions": [
+    {"q": "LangChain 框架有哪些核心模块？", "expected": [33, 36, 37]},
+    {"q": "典型的 RAG 应用程序包含哪两个主要组件？", "expected": [47]},
+    {"q": "开发文本总结应用时，最关键的问题是什么？", "expected": [39, 40]},
+    {"q": "在线调用大模型适合哪些场景？", "expected": [15]},
+    {"q": "离线调用大模型有什么特点和适用场景？", "expected": [23, 24]},
+    {"q": "怎样用 OpenAI 的 Python SDK 调用 DeepSeek 接口？", "expected": [16, 18]},
+    {"q": "CharacterTextSplitter 里的 chunk_size 和 chunk_overlap 分别控制什么？", "expected": [51]},
+    {"q": "ReAct 框架的设计理念是什么？", "expected": [58]},
+    {"q": "AutoGen 支持哪些多智能体对话模式？", "expected": [57, 61]},
+    {"q": "本地化部署 ChatGLM3-6B 对硬件有什么要求？", "expected": [27]},
+    {"q": "和模型微调相比，RAG 有哪些优势？", "expected": [45]},
+    {"q": "LangSmith 和 LangGraph 分别用来做什么？", "expected": [34]},
+    {"q": "主流的大模型应用开发框架有哪些，各有什么特点？", "expected": [20, 30]},
+    {"q": "一个智能体由哪些核心组件构成？", "expected": [55, 56]},
+    {"q": "实验 2 第 2 关的聊天机器人要实现哪些功能？", "expected": [73, 74]},
+    {"q": "Dify 是一个什么样的平台？", "expected": [29]},
+    {"q": "Hugging Face 的 pipeline 接口有什么作用？", "expected": [25]},
+    {"q": "大语言模型有哪些固有局限，RAG 如何缓解？", "expected": [44]}
+  ]
+}
