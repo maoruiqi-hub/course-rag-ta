@@ -98,7 +98,7 @@ def make_search_tool(knowledge_base: KnowledgeBase):
             source = metadata.get("source", "未知文件")
             location = metadata.get("location") or metadata.get("page_label", "未知位置")
             content = document.page_content.strip()[:500]
-            blocks.append(f"[{index}] 《{source}》 {location}（相关度 {score:.2f}）\n{content}")
+            blocks.append(f"[{index}] {source} · {location}（相关度 {score:.2f}）\n{content}")
         return "\n\n".join(blocks)
 
     return search_course_materials

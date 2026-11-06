@@ -7,6 +7,7 @@ from course_ta.qa import (
     answer_question,
     condense_question,
     dedupe_retrieval,
+    demote_headings,
     format_context,
     history_to_messages,
     make_sources,
@@ -14,6 +15,11 @@ from course_ta.qa import (
     route_summary_mode,
     summarize_documents,
 )
+
+
+def test_demote_headings_only_touches_heading_lines() -> None:
+    text = "# 主题\n正文 # 不是标题\n## 概念\n#### 已是四级\n#标签"
+    assert demote_headings(text) == "#### 主题\n正文 # 不是标题\n#### 概念\n#### 已是四级\n#标签"
 
 
 def doc(text: str, page: int = 1) -> Document:

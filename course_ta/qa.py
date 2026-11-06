@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
@@ -18,7 +19,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 SUMMARY_SYSTEM = (
     "你是一名严谨的大学课程助教。你的任务是把课程资料整理成便于复习的中文摘要。"
-    "只能依据给定资料，不要补充资料之外的事实；如果资料中有明显缺口，请直接指出。"
+    "只能依据给定资料，不要补充资料之外的事实；聚焦知识内容本身，不评价资料的排版或质量。"
 )
 
 STUFF_PROMPT = ChatPromptTemplate.from_messages(
@@ -30,8 +31,10 @@ STUFF_PROMPT = ChatPromptTemplate.from_messages(
             "要求：\n"
             "1. 先用一句话概括主题；\n"
             "2. 按“核心概念 / 关键流程 / 重要结论 / 复习提示”分节；\n"
-            "3. 保留资料中的关键术语，尽量标注来源页码（如 [第 12 页]）；\n"
-            "4. 不要编造资料中没有的内容。\n\n"
+            "3. 保留资料中的关键术语，按资料给出的位置写法标注来源"
+            "（如 [第 12 页]、[第 3 张幻灯片]）；\n"
+            "4. 不要编造资料中没有的内容；\n"
+            "5. 全文控制在 800 字以内，每节不超过 5 条要点。\n\n"
             "资料：\n{context}",
         ),
     ]
@@ -60,7 +63,8 @@ REDUCE_PROMPT = ChatPromptTemplate.from_messages(
             "1. 先用一句话概括主题；\n"
             "2. 按“核心概念 / 关键流程 / 重要结论 / 复习提示”分节；\n"
             "3. 合并重复内容，保留页码标记；\n"
-            "4. 不要添加摘录中没有的信息。\n\n"
+            "4. 不要添加摘录中没有的信息；\n"
+            "5. 全文控制在 800 字以内，每节不超过 5 条要点。\n\n"
             "各部分要点：\n{summaries}",
         ),
     ]
@@ -212,6 +216,11 @@ def dedupe_retrieval(
         if len(results) >= limit:
             break
     return results
+
+
+def demote_headings(markdown: str) -> str:
+    """把模型输出的一、二、三级标题降为四级，避免摘要标题比页面标题还大。"""
+    return re.sub(r"^#{1,3}(?=\s)", "####", markdown, flags=re.MULTILINE)
 
 
 def route_summary_mode(
