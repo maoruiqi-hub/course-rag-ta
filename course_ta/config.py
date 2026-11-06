@@ -79,7 +79,7 @@ def get_settings() -> Settings:
         llm_api_key=_env("LLM_API_KEY", "DEEPSEEK_API_KEY"),
         llm_base_url=_env("LLM_BASE_URL", default="https://api.deepseek.com"),
         llm_model=_env("LLM_MODEL", default="deepseek-flash"),
-        embedding_provider=_env("EMBEDDING_PROVIDER", default="siliconflow").lower(),
+        embedding_provider=_env("EMBEDDING_PROVIDER", default="fastembed").lower(),
         embedding_api_key=_env("EMBEDDING_API_KEY", "SILICONFLOW_API_KEY"),
         embedding_base_url=_env("EMBEDDING_BASE_URL", default="https://api.siliconflow.com/v1"),
         embedding_model=_env("EMBEDDING_MODEL", default="Qwen/Qwen3-Embedding-0.6B"),
@@ -142,9 +142,9 @@ def build_llm(settings: Settings | None = None) -> ChatOpenAI:
 def build_embeddings(settings: Settings | None = None):
     """构造 embedding 客户端。
 
-    默认走 OpenAI 兼容的 SiliconFlow；如果账号没有余额，可把
-    ``EMBEDDING_PROVIDER`` 设为 ``fastembed``，使用本地 ONNX 小模型
-    ``BAAI/bge-small-zh-v1.5``（首次运行会下载约 100MB）。
+    默认使用本地 ONNX 小模型 ``BAAI/bge-small-zh-v1.5``（FastEmbed，首次运行
+    下载约 100MB，无需 key）；把 ``EMBEDDING_PROVIDER`` 设为 ``siliconflow``
+    可切换到 OpenAI 兼容的 SiliconFlow 云端 embedding。
     """
     settings = settings or validate_settings()
     if settings.embedding_provider == "fastembed":
@@ -164,3 +164,23 @@ def build_embeddings(settings: Settings | None = None):
         max_retries=3,
         timeout=60,
     )
+
+
+def friendly_error(exc: Exception) -> str:
+    """把常见的 API 异常翻译成可操作的中文提示，原始信息附在后面便于排查。"""
+    raw = str(exc)
+    lowered = raw.lower()
+    status = getattr(exc, "status_code", None)
+    if status == 402 or "insufficient balance" in lowered:
+        hint = "模型账户余额不足，请到服务商控制台充值，或在 .env 中更换 API key。"
+    elif status == 401 or "authentication" in lowered or "invalid api key" in lowered:
+        hint = "API key 无效或已过期，请检查 .env 中的 LLM_API_KEY。"
+    elif status == 429 or "rate limit" in lowered:
+        hint = "请求过于频繁，已触发限流，请稍后再试。"
+    elif status == 404 or "model not exist" in lowered or "model_not_found" in lowered:
+        hint = "模型名不存在，请检查 .env 中的 LLM_MODEL。"
+    elif "timed out" in lowered or "timeout" in lowered or "connection" in lowered:
+        hint = "网络连接超时，请检查网络或代理设置后重试。"
+    else:
+        return raw
+    return f"{hint}（{raw[:160]}）"
